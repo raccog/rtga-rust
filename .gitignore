@@ -7,3 +7,8 @@
 
 #/target
 Cargo.lock
+
+# Extra patterns
+*.swp
+.DS_Store
+*~
