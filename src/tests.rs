@@ -1,6 +1,13 @@
+use crate::{TgaError, TgaImage, TgaImageType};
+
 #[test]
-fn it_works() {
-    let result = 2 + 2;
-    assert_eq!(result, 4);
+fn write_blank() -> Result<(), TgaError> {
+    // Create blank image
+    let image = TgaImage::new(TgaImageType::TrueColorImage, 1900, 1080, 24)?;
+    
+    // Write image to file
+    image.to_file("test.tga")?;
+    
+    Ok(())
 }
 
