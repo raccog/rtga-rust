@@ -13,6 +13,25 @@ use std::path::Path;
 
 pub const HEADER_SIZE: usize = 18;
 
+pub enum TgaColor {
+    Greyscale(u8),
+    RGB16([u8; 2]),
+    RGB24([u8; 3]),
+    RGBA([u8; 4])
+}
+
+impl TgaColor {
+    pub fn pixel_depth(&self) -> u8 {
+        use TgaColor::*;
+        match self {
+            Greyscale(_) => 8,
+            RGB16(_) => 16,
+            RGB24(_) => 24,
+            RGBA(_) => 32
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct TgaImage {
     pub header: TgaHeader,
