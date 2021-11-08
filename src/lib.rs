@@ -11,6 +11,9 @@ use std::io::Error as IOError;
 use std::io::{Read, Write};
 use std::path::Path;
 
+use TgaColor::*;
+use TgaImageType::*;
+
 pub const HEADER_SIZE: usize = 18;
 
 pub enum TgaColor {
@@ -22,7 +25,6 @@ pub enum TgaColor {
 
 impl TgaColor {
     pub fn pixel_depth(&self) -> u8 {
-        use TgaColor::*;
         match self {
             Greyscale(_) => 8,
             RGB16(_) => 16,
@@ -54,7 +56,6 @@ pub enum TgaImageType {
 
 impl TgaImageType {
     pub fn from_u8(val: u8) -> Result<TgaImageType, TgaError> {
-        use TgaImageType::*;
         match val {
             0 => Ok(NoImage),
             1 => Ok(ColorMappedImage),
@@ -64,6 +65,19 @@ impl TgaImageType {
             10 => Ok(RleTrueColorImage),
             11 => Ok(RleBlackAndWhiteImage),
             _ => Err(TgaError::InvalidImageType)
+        }
+    }
+
+    pub fn valid_depth(&self, pixel_depth: u8) -> bool {
+        match self {
+            NoImage => pixel_depth == 0,
+            ColorMappedImage | TrueColorImage |
+            RleColorMappedImage |
+            RleTrueColorImage => match pixel_depth {
+                16 | 24 | 32 => true,
+                _ => false
+            }
+            BlackAndWhiteImage | RleBlackAndWhiteImage => pixel_depth == 8
         }
     }
 }
@@ -154,7 +168,7 @@ pub enum TgaError {
 impl TgaImage {
     pub fn new(image_type: TgaImageType, width: u16, height: u16, pixel_depth: u8) -> Result<TgaImage, TgaError> {
         // Ensure the pixel depth is valid
-        if !depth_is_valid(pixel_depth) {
+        if !image_type.valid_depth(pixel_depth) {
             return Err(TgaError::InvalidPixelDepth);
         }
 
@@ -240,10 +254,6 @@ impl TgaImage {
 
         Ok(())
     }
-}
-
-fn depth_is_valid(pixel_depth: u8) -> bool {
-    return pixel_depth % 8 == 0 && pixel_depth <= 32;
 }
 
 fn image_size(width: u16, height: u16, pixel_depth: u8) -> usize {
