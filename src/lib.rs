@@ -16,8 +16,9 @@ use TgaImageType::*;
 
 pub const HEADER_SIZE: usize = 18;
 
+#[derive(Clone, Copy)]
 pub enum TgaColor {
-    Greyscale(u8),
+    Greyscale([u8; 1]),
     RGB16([u8; 2]),
     RGB24([u8; 3]),
     RGBA([u8; 4])
@@ -30,6 +31,15 @@ impl TgaColor {
             RGB16(_) => 16,
             RGB24(_) => 24,
             RGBA(_) => 32
+        }
+    }
+
+    pub fn to_slice(&self) -> &[u8] {
+        match self {
+            Greyscale(s) => &s[..],
+            RGB16(s) => &s[..],
+            RGB24(s) => &s[..],
+            RGBA(s) => &s[..],
         }
     }
 }
@@ -68,6 +78,22 @@ impl TgaImageType {
         }
     }
 
+    pub fn valid_color(&self, color: TgaColor) -> bool {
+        match self {
+            NoImage => false,
+            ColorMappedImage | TrueColorImage |
+            RleColorMappedImage |
+            RleTrueColorImage => match color {
+                Greyscale(_) => false,
+                _ => true
+            },
+            BlackAndWhiteImage | RleBlackAndWhiteImage => match color {
+                Greyscale(_) => true,
+                _ => false
+            }
+        }
+    }
+
     pub fn valid_depth(&self, pixel_depth: u8) -> bool {
         match self {
             NoImage => pixel_depth == 0,
@@ -91,18 +117,18 @@ pub enum TgaImageState {
 
 #[derive(Clone, Copy)]
 pub struct TgaHeader {
-    id_size: u8,
-    has_color_map: bool,
-    image_type: TgaImageType,
-    color_map_first_index: u16,
-    color_map_size: u16,
-    color_map_pixel_depth: u8,
-    x_origin: u16,
-    y_origin: u16,
-    width: u16,
-    height: u16,
-    image_pixel_depth: u8,
-    descriptor: u8,
+    pub id_size: u8,
+    pub has_color_map: bool,
+    pub image_type: TgaImageType,
+    pub color_map_first_index: u16,
+    pub color_map_size: u16,
+    pub color_map_pixel_depth: u8,
+    pub x_origin: u16,
+    pub y_origin: u16,
+    pub width: u16,
+    pub height: u16,
+    pub image_pixel_depth: u8,
+    pub descriptor: u8,
 }
 
 impl TgaHeader {
@@ -160,6 +186,8 @@ pub enum TgaError {
     InvalidPixelDepth,
     InvalidImageType,
     InvalidSize,
+    InvalidCoordinate,
+    InvalidColor,
     FileOpen(IOError),
     FileRead(IOError),
     FileWrite(IOError),
@@ -215,6 +243,11 @@ impl TgaImage {
             return Err(TgaError::InvalidSize);
         }
 
+        // Ensure the pixel depth is valid
+        if !header.image_type.valid_depth(header.image_pixel_depth) {
+            return Err(TgaError::InvalidPixelDepth);
+        }
+
         // Read image id, color map, and image data
         let mut idx = HEADER_SIZE;
         let id = buf[idx..idx + header.id_size as usize].to_vec().into_boxed_slice();
@@ -230,6 +263,34 @@ impl TgaImage {
             color_map,
             data
         })
+    }
+    
+    pub fn set_pixel(&mut self, x: u16, y: u16, color: TgaColor) -> Result<(), TgaError> {
+        // Ensure that the pixel coordinate is valid for this image
+        if self.header.width <= x || self.header.height <= y {
+            return Err(TgaError::InvalidCoordinate);
+        }
+
+        // Ensure the color is valid for this image
+        if !self.header.image_type.valid_color(color) {
+            return Err(TgaError::InvalidColor);
+        }
+
+        // Ensure the color's pixel depth is valid for this image
+        let pixel_depth = color.pixel_depth();
+        if !self.header.image_type.valid_depth(pixel_depth) || pixel_depth != self.header.image_pixel_depth {
+            return Err(TgaError::InvalidPixelDepth);
+        }
+
+        // Set pixel to color
+        let pixel_depth_bytes = (pixel_depth / 8) as u16;
+        let start = (x + y * self.header.width) * pixel_depth_bytes;
+        let end = start + pixel_depth_bytes;
+        let start = start as usize;
+        let end = end as usize;
+        self.data[start..end].copy_from_slice(color.to_slice());
+
+        Ok(())
     }
 
     pub fn to_file<P: AsRef<Path>>(&self, filename: P) -> Result<(), TgaError> {
